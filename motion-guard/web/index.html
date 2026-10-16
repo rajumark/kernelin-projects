@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motion Guard</title>
+<meta name="description" content="Traffic and security camera analytics in plain Kotlin: block-matching motion vectors, vehicle speeds, zones and events, on the GPU via Kernelin and WebGPU.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f6f2; --card: #ffffff; --ink: #1d1b16; --ink-2: #5d5a52; --ink-3: #8f8b81;
+    --line: #e6e3db; --accent: #7f52ff; --accent-2: #e8e0ff; --good: #0f7b5f; --good-bg: #ddf3ea;
+    --warn: #a35a00; --warn-bg: #fdf0dc; --bad: #c4322b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15140f; --card: #1e1d18; --ink: #f1efe8; --ink-2: #b8b4aa; --ink-3: #858176; --line: #2f2d27;
+      --accent: #a585ff; --accent-2: #2c2440; --good: #4cc79f; --good-bg: #173229; --warn: #f0a84b; --warn-bg: #352812; --bad: #ff6b61; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 Inter, system-ui, sans-serif; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 28px 0 8px; }
+  .crumb { font-size: 13px; color: var(--ink-3); }
+  .crumb a { color: var(--ink-2); }
+  h1 { font-size: clamp(28px, 4.2vw, 40px); line-height: 1.12; margin: 8px 0 10px; letter-spacing: -0.02em; }
+  h1 em { font-style: normal; color: var(--accent); }
+  .lead { color: var(--ink-2); max-width: 820px; margin: 0; font-size: 16.5px; }
+  h2 { font-size: 20px; margin: 36px 0 12px; letter-spacing: -0.01em; }
+  .badge { display: inline-flex; font: 12.5px/1 "JetBrains Mono", monospace; padding: 6px 10px; border-radius: 999px;
+    background: var(--accent-2); color: var(--accent); margin-top: 14px; }
+  .badge.off { background: var(--warn-bg); color: var(--warn); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .app { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; margin-top: 18px; align-items: start; }
+  .stage { position: relative; border-radius: 10px; overflow: hidden; background: #000; }
+  .stage canvas { display: block; width: 100%; height: auto; }
+  #overlay { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .toolbar .grow { flex: 1; }
+  button, select, .file { font: 600 13.5px Inter, sans-serif; border-radius: 9px; padding: 8px 13px; cursor: pointer; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.on { background: var(--accent-2); color: var(--accent); border-color: transparent; }
+  .file input { display: none; }
+  .hint { font-size: 13px; color: var(--ink-3); }
+  .side h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); margin: 16px 0 8px; }
+  .side h3:first-child { margin-top: 0; }
+  .lane { display: flex; justify-content: space-between; font-size: 14px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .lane b { font: 600 14px "JetBrains Mono", monospace; }
+  .events { max-height: 300px; overflow: auto; }
+  .event { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .event .live { color: var(--bad); font-weight: 600; }
+  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 14px; }
+  .tile .k { font-size: 12.5px; color: var(--ink-2); }
+  .tile .v { font: 600 24px/1.2 "JetBrains Mono", monospace; margin-top: 4px; letter-spacing: -0.02em; }
+  .tile .s { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+  .tile.hero .v { color: var(--accent); }
+  .why { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .why h3 { margin: 0 0 6px; font-size: 15px; }
+  .why p { margin: 0; color: var(--ink-2); font-size: 14px; }
+  pre { margin: 0; overflow: auto; max-height: 420px; font: 12.5px/1.5 "JetBrains Mono", monospace; background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tabs button { padding: 6px 12px; font-size: 13px; }
+  footer { margin: 48px 0 32px; font-size: 13px; color: var(--ink-3); }
+  footer a { color: var(--ink-2); }
+  @media (max-width: 960px) { .app { grid-template-columns: minmax(0, 1fr); } .tiles { grid-template-columns: 1fr 1fr; } .why { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="crumb"><a href="../">Kernelin projects</a> / Motion Guard</div>
+    <h1>Camera analytics that see <em>direction and speed</em>, not just "something moved".</h1>
+    <p class="lead">Block-matching motion estimation, the core of every video encoder: every 16×16 block is searched ±12 px in the previous frame, 576 million pixel comparisons per 720p frame. From the vectors: vehicle speed per lane, zones you can arm or ignore, and an event log. Plain Kotlin, compiled to WebGPU by Kernelin.</p>
+    <div class="badge" id="badge">starting…</div>
+  </header>
+
+  <div class="app">
+    <div class="card">
+      <div class="toolbar">
+        <select id="source">
+          <option value="scene">Test camera · parking lot (ground truth)</option>
+          <option value="webcam">Webcam</option>
+        </select>
+        <label class="file">Open video…<input type="file" id="file" accept="video/*"></label>
+        <span class="grow"></span>
+        <button id="mode-vectors" class="on">Vectors</button>
+        <button id="mode-privacy">Privacy mask</button>
+        <button id="pause">Pause</button>
+      </div>
+      <div class="stage">
+        <canvas id="video"></canvas>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div class="toolbar" style="margin:12px 0 0">
+        <button class="primary" id="runCpu">Measure one frame on CPU</button>
+        <span class="hint" id="hint">Click a zone to ignore it (e.g. the tree); ignored zones never raise events.</span>
+      </div>
+    </div>
+
+    <div class="card side">
+      <h3>Lane speeds</h3>
+      <div id="lanes"><div class="hint">Shown for the test camera (calibrated: a lane is 3.5 m).</div></div>
+      <h3>Events</h3>
+      <div class="events" id="events"><div class="hint">No events yet.</div></div>
+    </div>
+  </div>
+
+  <div class="tiles">
+    <div class="tile card hero"><div class="k">GPU, block matching per frame</div><div class="v" id="tGpu">–</div><div class="s" id="tGpuSub">incl. upload + read back</div></div>
+    <div class="tile card"><div class="k">Frames per second (whole loop)</div><div class="v" id="tFps">–</div><div class="s" id="tFpsSub">capture + GPU + analysis + draw</div></div>
+    <div class="tile card"><div class="k">CPU, same Kotlin (Wasm, 1 thread)</div><div class="v" id="tCpu">–</div><div class="s" id="tCpuSub">press "Measure"</div></div>
+    <div class="tile card"><div class="k">GPU speedup</div><div class="v" id="tSpeed">–</div><div class="s">same frame, same vectors</div></div>
+    <div class="tile card"><div class="k">Accuracy vs ground truth</div><div class="v" id="tAcc">–</div><div class="s" id="tAccSub">precision / recall, test camera</div></div>
+  </div>
+
+  <h2>Why this matters</h2>
+  <div class="why">
+    <div class="card"><h3>Fewer false alarms</h3><p>Plain frame differencing alarms on swaying trees, rain and light changes. Motion vectors know direction and speed: leaves wiggle in place, cars travel. In the test scene the tree raises 0 false detections.</p></div>
+    <div class="card"><h3>Speed and direction for free</h3><p>The same vectors give vehicle speed per lane (here within 6% of the truth) and wrong-way detection: the analytics traffic departments buy dedicated hardware for.</p></div>
+    <div class="card"><h3>Where the GPU is not optional</h3><p>576 million comparisons per frame, 30 times a second, is 17 billion per second. One CPU core manages about one frame per second; the GPU keeps up with live video.</p></div>
+  </div>
+
+  <h2>The code</h2>
+  <div class="card">
+    <div class="tabs"><button class="on" data-tab="kotlin">Kotlin (what you write)</button><button data-tab="wgsl">WGSL (what Kernelin generates)</button></div>
+    <pre><code id="code">loading…</code></pre>
+  </div>
+
+  <footer>
+    Built with <a href="https://github.com/rajumark/kernelin">Kernelin</a> 0.1.0 from Maven Central ·
+    <a href="https://github.com/rajumark/kernelin-projects/tree/main/motion-guard">Source</a> ·
+    Video never leaves your device: everything runs locally in the browser.
+  </footer>
+</div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const BLOCK = 16, ZC = 8, ZR = 5;
+let K = null, gpuOk = false, W = 1280, H = 720;
+let source = "scene", sceneIndex = 0, prev = null, cur = null, last = null, paused = false, mode = "vectors";
+let videoEl = null, grab = null, armed = new Array(ZC * ZR).fill(true);
+let loopTimes = [], lastStats = null, cpuMs = null, gpuMsAvg = [];
+const fmtMs = (ms) => ms >= 1000 ? (ms / 1000).toFixed(2) + " s" : ms.toFixed(ms < 10 ? 1 : 0) + " ms";
+
+function setSize(w, h) {
+  W = w; H = h;
+  for (const c of [$("video"), $("overlay")]) { c.width = w; c.height = h; }
+  K.motionReset(w, h);
+  armed.fill(true);
+  prev = null; sceneIndex = 0; gpuMsAvg = []; cpuMs = null;
+  $("tCpu").textContent = "–"; $("tSpeed").textContent = "–";
+  grab = $("video").getContext("2d", { willReadFrequently: true });
+}
+
+async function nextFrame() {
+  if (source === "scene") {
+    const f = gpuOk ? await K.sceneFrameGpu(sceneIndex) : K.sceneFrameCpu(sceneIndex);
+    return f;
+  }
+  grab.drawImage(videoEl, 0, 0, W, H);
+  return new Int32Array(grab.getImageData(0, 0, W, H).data.buffer);
+}
+
+function paintFrame(frame) {
+  $("video").getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(frame.buffer, frame.byteOffset, frame.length * 4), W, H), 0, 0);
+}
+
+function drawOverlay(field, stats, frame) {
+  const g = $("overlay").getContext("2d");
+  g.clearRect(0, 0, W, H);
+  const bx = stats.blocksX;
+  for (let b = 0; b < field.length / 3; b++) {
+    if (!field[3 * b + 2]) continue;
+    const x = (b % bx) * BLOCK, y = Math.floor(b / bx) * BLOCK;
+    const dx = field[3 * b], dy = field[3 * b + 1];
+    if (mode === "privacy") {
+      const c = frame[Math.min(y + 8, H - 1) * W + Math.min(x + 8, W - 1)];
+      g.fillStyle = `rgb(${c & 255},${(c >>> 8) & 255},${(c >>> 16) & 255})`;
+      g.fillRect(x, y, BLOCK, BLOCK);
+      continue;
+    }
+    const hue = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+    g.fillStyle = `hsla(${hue},90%,55%,0.28)`;
+    g.fillRect(x, y, BLOCK, BLOCK);
+    g.strokeStyle = `hsl(${hue},95%,60%)`; g.lineWidth = 2;
+    const cx = x + 8, cy = y + 8, ex = cx + dx * 1.6, ey = cy + dy * 1.6;
+    g.beginPath(); g.moveTo(cx, cy); g.lineTo(ex, ey); g.stroke();
+  }
+  // zones: thin grid, ignored zones hatched
+  const zw = Math.ceil(stats.blocksX / ZC), zh = Math.ceil(stats.blocksY / ZR);
+  g.lineWidth = 1;
+  for (let z = 0; z < ZC * ZR; z++) {
+    const x0 = Math.floor((z % ZC) * stats.blocksX / ZC) * BLOCK, y0 = Math.floor(Math.floor(z / ZC) * stats.blocksY / ZR) * BLOCK;
+    const x1 = Math.floor(((z % ZC) + 1) * stats.blocksX / ZC) * BLOCK, y1 = Math.floor((Math.floor(z / ZC) + 1) * stats.blocksY / ZR) * BLOCK;
+    g.strokeStyle = "rgba(255,255,255,0.10)"; g.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    if (!armed[z]) { g.fillStyle = "rgba(0,0,0,0.45)"; g.fillRect(x0, y0, x1 - x0, y1 - y0); g.fillStyle = "rgba(255,255,255,.75)"; g.font = "600 14px Inter"; g.fillText("ignored", x0 + 8, y0 + 20); }
+  }
+  // lane speeds on the picture
+  g.font = "600 18px JetBrains Mono, monospace";
+  for (const l of stats.lanes) {
+    if (l.kmh === null) continue;
+    const y = (l.top + l.bottom) / 2 * H + 6;
+    const text = `${l.kmh < 0 ? "←" : "→"} ${Math.abs(l.kmh).toFixed(0)} km/h`;
+    g.fillStyle = "rgba(0,0,0,.6)"; g.fillRect(W - 170, y - 22, 160, 30);
+    g.fillStyle = "#fff"; g.fillText(text, W - 160, y);
+  }
+}
+
+function renderSide(stats) {
+  if (stats.lanes.length) {
+    $("lanes").innerHTML = stats.lanes.map((l) => `<div class="lane"><span>${l.name}</span><b>${l.kmh === null ? "–" : (l.kmh < 0 ? "← " : "→ ") + Math.abs(l.kmh).toFixed(1) + " km/h"}</b></div>`).join("");
+  } else $("lanes").innerHTML = '<div class="hint">Lane speeds need a calibrated camera (shown for the test camera).</div>';
+  const ev = stats.events.slice(-30).reverse();
+  $("events").innerHTML = ev.length ? ev.map((e, i) => {
+    const t = (f) => (f / 30).toFixed(1) + " s";
+    return `<div class="event"><span>${e.active ? '<span class="live">● live</span> ' : ""}#${stats.events.length - i} at ${t(e.start)}</span><span>${t(e.end - e.start + 1)} · ${e.peak} blocks</span></div>`;
+  }).join("") : '<div class="hint">No events yet.</div>';
+  if (stats.precision !== undefined && stats.frame > 5) {
+    $("tAcc").textContent = `${stats.precision.toFixed(3)} / ${stats.recall.toFixed(3)}`;
+    $("tAccSub").textContent = `vector error ${stats.vectorError.toFixed(2)} px/frame · ${stats.frame} frames`;
+  } else if (source !== "scene") { $("tAcc").textContent = "–"; $("tAccSub").textContent = "only the test camera has ground truth"; }
+}
+
+async function loop() {
+  if (paused || !gpuOk) { requestAnimationFrame(loop); return; }
+  const t0 = performance.now();
+  try {
+    const frame = await nextFrame();
+    if (prev) {
+      const r = await K.motionGpu(prev, frame, source === "scene" ? sceneIndex : -1);
+      lastStats = JSON.parse(r.stats);
+      paintFrame(frame);
+      drawOverlay(r.field, lastStats, frame);
+      renderSide(lastStats);
+      gpuMsAvg.push(r.ms); if (gpuMsAvg.length > 30) gpuMsAvg.shift();
+      const avg = gpuMsAvg.reduce((a, b) => a + b, 0) / gpuMsAvg.length;
+      $("tGpu").textContent = fmtMs(avg);
+      $("tGpuSub").textContent = `${W}×${H}, avg of ${gpuMsAvg.length} frames`;
+      if (cpuMs) $("tSpeed").textContent = Math.round(cpuMs / avg) + "×";
+    } else paintFrame(frame);
+    prev = frame; last = frame;
+    if (source === "scene") sceneIndex++;
+  } catch (e) { $("hint").textContent = "Error: " + e; }
+  loopTimes.push(performance.now()); if (loopTimes.length > 30) loopTimes.shift();
+  if (loopTimes.length > 2) $("tFps").textContent = ((loopTimes.length - 1) / ((loopTimes[loopTimes.length - 1] - loopTimes[0]) / 1000)).toFixed(0);
+  // The test camera is 30 fps: don't run faster than real time.
+  const wait = source === "scene" ? Math.max(0, 33.3 - (performance.now() - t0)) : 0;
+  setTimeout(() => requestAnimationFrame(loop), wait);
+}
+
+async function useSource(kind, file) {
+  source = kind;
+  if (videoEl) { videoEl.pause(); videoEl.srcObject?.getTracks().forEach((t) => t.stop()); }
+  if (kind === "scene") { setSize(1280, 720); return; }
+  videoEl = document.createElement("video");
+  videoEl.muted = true; videoEl.loop = true; videoEl.playsInline = true;
+  if (kind === "webcam") videoEl.srcObject = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
+  else videoEl.src = URL.createObjectURL(file);
+  await videoEl.play();
+  const scale = Math.min(1, 1280 / videoEl.videoWidth);
+  setSize(Math.round(videoEl.videoWidth * scale), Math.round(videoEl.videoHeight * scale));
+}
+
+$("overlay").addEventListener("click", (e) => {
+  if (!lastStats) return;
+  const r = $("overlay").getBoundingClientRect();
+  const bx = Math.floor((e.clientX - r.left) / r.width * W / BLOCK), by = Math.floor((e.clientY - r.top) / r.height * H / BLOCK);
+  const z = Math.floor(by * ZR / lastStats.blocksY) * ZC + Math.floor(bx * ZC / lastStats.blocksX);
+  armed[z] = !armed[z];
+  K.motionSetZone(z, armed[z]);
+});
+$("source").addEventListener("change", () => useSource($("source").value).catch((e) => { $("hint").textContent = "Camera: " + e.message; }));
+$("file").addEventListener("change", () => { const f = $("file").files[0]; if (f) useSource("file", f); });
+$("pause").addEventListener("click", () => { paused = !paused; $("pause").textContent = paused ? "Play" : "Pause"; });
+for (const m of ["vectors", "privacy"]) $("mode-" + m).addEventListener("click", () => {
+  mode = m; $("mode-vectors").classList.toggle("on", m === "vectors"); $("mode-privacy").classList.toggle("on", m === "privacy");
+});
+$("runCpu").addEventListener("click", async () => {
+  if (!prev || !last) return;
+  $("runCpu").disabled = true; $("tCpu").textContent = "…";
+  await new Promise((r) => setTimeout(r, 30));
+  const wasPaused = paused; paused = true;
+  const r = K.motionCpu(prev, last, -1);
+  cpuMs = r.ms;
+  $("tCpu").textContent = fmtMs(cpuMs);
+  $("tCpuSub").textContent = `${W}×${H}, one frame`;
+  paused = wasPaused;
+  $("runCpu").disabled = false;
+});
+document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", async () => {
+  document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
+  $("code").textContent = b.dataset.tab === "wgsl" ? K.motionWgsl() : await fetch("Kernels.kt").then((r) => r.text());
+}));
+
+(async () => {
+  K = await import("./wasm/motion-guard.mjs");
+  $("code").textContent = await fetch("Kernels.kt").then((r) => r.text());
+  try {
+    $("badge").textContent = "GPU · " + await K.motionInit();
+    gpuOk = true;
+  } catch (e) {
+    $("badge").textContent = "WebGPU not available: this app needs a GPU (try Chrome, Edge or Safari)";
+    $("badge").classList.add("off");
+  }
+  setSize(1280, 720);
+  loop();
+})();
+</script>
+</body>
+</html>

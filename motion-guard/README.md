@@ -1,6 +1,6 @@
 # Motion Guard: traffic and security camera analytics in plain Kotlin
 
-> Status: the engine, JVM tool and tests are done; the browser (GPU) app is being built.
+**Live:** https://rajumark.github.io/kernelin-projects/motion-guard/
 
 Finds where every 16×16 block of a video frame came from in the previous frame (block matching, the core of every
 video encoder), which gives a motion vector per block. From the vectors: what moves, which way and how fast, vehicle
@@ -24,12 +24,22 @@ Every moving object's position and velocity is known exactly, so accuracy is mea
 | Sensor noise alone flagged | 0 blocks |
 | Lane speeds | 39.4 / −26.3 / 52.5 km/h measured vs 37.8 / −25.2 / 54.6 true |
 
-## Speed (CPU, same Kotlin)
+## Speed (block matching, one 720p frame)
 
-| Where | Per 720p frame |
+| Where | Per frame |
 |---|---|
-| JVM, 1 core | 913 ms |
-| JVM, 10 cores | 201 ms (5 fps) |
+| GPU, Apple M5, WebGPU in Chrome (incl. upload + read back) | **19 ms**: the live app runs at the camera's 30 fps |
+| CPU, same Kotlin on the JVM, 10 cores | 201 ms (5 fps) |
+| CPU, same Kotlin on the JVM, 1 core | 913 ms |
+| CPU, same Kotlin as Wasm, 1 browser thread | 992 ms (GPU **53×** faster) |
+
+The browser app shows the same accuracy live (precision 0.995, recall 0.97 against ground truth).
+
+## In the app
+
+- Test camera with ground truth, your webcam, or any video file (it never leaves your device)
+- Motion vectors colored by direction, or a **privacy mask** that pixelates everything moving
+- Lane speeds in km/h (test camera), click zones to ignore them, live event log
 
 ## The code
 
@@ -37,7 +47,10 @@ Every moving object's position and velocity is known exactly, so accuracy is mea
 - [`Detector.kt`](src/commonMain/kotlin/motion/Detector.kt): best vector per block, two-frame consistency, lane speed, zones, events, scoring
 - `src/jvmTest`: 5 tests (an exact known shift, noise-only frames, scene accuracy and speeds, events, shaders)
 
+- `src/wasmJsMain` + `web/`: the browser app
+
 ```bash
 ./gradlew jvmTest
 ./gradlew jvmRun
+./gradlew exportSite   # then serve ../docs
 ```

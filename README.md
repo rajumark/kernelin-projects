@@ -14,7 +14,7 @@ compiler plugin that turns `@Kernel` functions into WebGPU compute shaders. Each
 |---|---|---|---|
 | [risk-engine](risk-engine) · simulation | Monte Carlo pricing + greeks of an options book: 6 products incl. Asian, barrier, lookback; 1M paths × 252 days × 4 scenarios | Black–Scholes and geometric-Asian closed forms (every run) | **46 ms** vs 2.4 s on 10 JVM cores (53×), vs 7 s in-browser CPU (218×) |
 | [photo-studio](photo-studio) · image | Photo editor with live sliders: edge-preserving denoise (169 taps/pixel), exposure, white balance, tone, color, sharpening, vignette | PSNR vs a noise-free test chart: **+11.3 dB** | denoise 3.8 MP in **48 ms** vs 790 ms on 10 JVM cores (16×), vs 6.8 s in-browser CPU (119×) |
-| [motion-guard](motion-guard) · video | Traffic/security camera analytics: block-matching motion estimation (576 M pixel comparisons per 720p frame), vehicle speed per lane, zones and events | Ground truth of a synthetic camera: precision 0.995, recall 0.972, speed error < 6% | CPU: 913 ms/frame (1 core), 201 ms (10 cores). GPU web app: in progress |
+| [motion-guard](motion-guard) · video | Traffic/security camera analytics: block-matching motion estimation (576 M pixel comparisons per 720p frame), vehicle speed per lane, zones and events | Ground truth of a synthetic camera: precision 0.995, recall 0.972, speed error < 6% | **19 ms**/frame (live 30 fps) vs 201 ms on 10 JVM cores (10×), vs 992 ms in-browser CPU (53×) |
 
 ## Why this exists
 
