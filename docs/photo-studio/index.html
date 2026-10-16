@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Photo Studio</title>
+<meta name="description" content="A GPU photo editor in plain Kotlin: edge-preserving denoise, exposure, white balance, tone and sharpening, compiled to WebGPU by Kernelin.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f6f2; --card: #ffffff; --ink: #1d1b16; --ink-2: #5d5a52; --ink-3: #8f8b81;
+    --line: #e6e3db; --accent: #7f52ff; --accent-2: #e8e0ff; --good: #0f7b5f; --good-bg: #ddf3ea;
+    --warn: #a35a00; --warn-bg: #fdf0dc; --chart-2: #e2711d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15140f; --card: #1e1d18; --ink: #f1efe8; --ink-2: #b8b4aa; --ink-3: #858176; --line: #2f2d27;
+      --accent: #a585ff; --accent-2: #2c2440; --good: #4cc79f; --good-bg: #173229; --warn: #f0a84b; --warn-bg: #352812; --chart-2: #f0954b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 Inter, system-ui, sans-serif; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 28px 0 8px; }
+  .crumb { font-size: 13px; color: var(--ink-3); }
+  .crumb a { color: var(--ink-2); }
+  h1 { font-size: clamp(28px, 4.2vw, 40px); line-height: 1.12; margin: 8px 0 10px; letter-spacing: -0.02em; }
+  h1 em { font-style: normal; color: var(--accent); }
+  .lead { color: var(--ink-2); max-width: 800px; margin: 0; font-size: 16.5px; }
+  h2 { font-size: 20px; margin: 36px 0 12px; letter-spacing: -0.01em; }
+  .badge { display: inline-flex; font: 12.5px/1 "JetBrains Mono", monospace; padding: 6px 10px; border-radius: 999px;
+    background: var(--accent-2); color: var(--accent); margin-top: 14px; }
+  .badge.off { background: var(--warn-bg); color: var(--warn); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .app { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; margin-top: 18px; align-items: start; }
+  .viewer { position: relative; border-radius: 10px; overflow: hidden; background: #000; touch-action: none; user-select: none; }
+  .viewer canvas { display: block; width: 100%; height: auto; }
+  .viewer #before { position: absolute; left: 0; top: 0; }
+  .viewer.zoom { overflow: auto; max-height: 72vh; }
+  .viewer.zoom canvas { width: auto; max-width: none; image-rendering: pixelated; }
+  .divider { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.3); cursor: ew-resize; }
+  .divider::after { content: "⟷"; position: absolute; top: 50%; left: -15px; width: 32px; height: 32px; margin-top: -16px; border-radius: 50%;
+    background: #fff; color: #222; display: grid; place-items: center; font-size: 15px; }
+  .label { position: absolute; top: 10px; font: 600 12px Inter, sans-serif; color: #fff; background: rgba(0,0,0,.55); padding: 3px 8px; border-radius: 6px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .toolbar .grow { flex: 1; }
+  button, select, .file { font: 600 13.5px Inter, sans-serif; border-radius: 9px; padding: 8px 13px; cursor: pointer; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .file input { display: none; }
+  .panel h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); margin: 16px 0 6px; }
+  .panel h3:first-child { margin-top: 0; }
+  .slider { display: grid; grid-template-columns: 1fr auto; font-size: 13px; color: var(--ink-2); margin: 6px 0; }
+  .slider input { grid-column: 1 / 3; width: 100%; accent-color: var(--accent); }
+  .slider b { font: 12px "JetBrains Mono", monospace; color: var(--ink); }
+  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 14px; }
+  .tile .k { font-size: 12.5px; color: var(--ink-2); }
+  .tile .v { font: 600 24px/1.2 "JetBrains Mono", monospace; margin-top: 4px; letter-spacing: -0.02em; }
+  .tile .s { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+  .tile.hero .v { color: var(--accent); }
+  .progress { height: 4px; background: var(--line); border-radius: 4px; overflow: hidden; width: 120px; display: none; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--chart-2); }
+  .why { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .why h3 { margin: 0 0 6px; font-size: 15px; }
+  .why p { margin: 0; color: var(--ink-2); font-size: 14px; }
+  pre { margin: 0; overflow: auto; max-height: 420px; font: 12.5px/1.5 "JetBrains Mono", monospace; background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .tabs button { padding: 6px 12px; font-size: 13px; }
+  .tabs button.on { background: var(--accent-2); color: var(--accent); border-color: transparent; }
+  .hint { font-size: 13px; color: var(--ink-3); }
+  footer { margin: 48px 0 32px; font-size: 13px; color: var(--ink-3); }
+  footer a { color: var(--ink-2); }
+  @media (max-width: 960px) { .app { grid-template-columns: minmax(0, 1fr); } .tiles { grid-template-columns: 1fr 1fr; } .why { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="crumb"><a href="../">Kernelin projects</a> / Photo Studio</div>
+    <h1>A photo editor where every slider is <em>live</em>, because the pixels are computed on the GPU.</h1>
+    <p class="lead">Edge-preserving denoise (169 neighbours per pixel), then exposure, white balance, shadows and highlights, contrast, saturation, sharpening and vignette. The whole pipeline is plain Kotlin; Kernelin compiles it to WebGPU. The test chart shows the effect in numbers: PSNR against the noise-free original.</p>
+    <div class="badge" id="badge">starting…</div>
+  </header>
+
+  <div class="app">
+    <div class="card">
+      <div class="toolbar">
+        <select id="source">
+          <option value="chart-6400">Test chart · ISO 6400 noise</option>
+          <option value="chart-12800">Test chart · ISO 12800 noise</option>
+          <option value="chart-1600">Test chart · ISO 1600 noise</option>
+        </select>
+        <label class="file">Open photo…<input type="file" id="file" accept="image/*"></label>
+        <span class="grow"></span>
+        <button id="zoom">100% crop</button>
+        <button id="download">Download</button>
+      </div>
+      <div class="viewer" id="viewer">
+        <canvas id="after"></canvas>
+        <canvas id="before"></canvas>
+        <div class="divider" id="divider"></div>
+        <span class="label" style="left:10px">Before</span>
+        <span class="label" style="right:10px">After</span>
+      </div>
+      <div class="toolbar" style="margin:12px 0 0">
+        <button class="primary" id="reset">Reset sliders</button>
+        <button id="auto">Suggested look</button>
+        <button id="runCpu">Run the same Kotlin on CPU</button>
+        <div class="progress" id="progress"><i></i></div>
+        <span class="hint" id="hint"></span>
+      </div>
+    </div>
+
+    <div class="card panel" id="panel">
+      <h3>Denoise</h3>
+      <div class="slider" data-d>Radius <b></b><input type="range" id="radius" min="0" max="10" step="1" value="6"></div>
+      <div class="slider" data-d>Color tolerance <b></b><input type="range" id="colorSigma" min="0.02" max="0.4" step="0.01" value="0.2"></div>
+      <div class="slider" data-d>Strength <b></b><input type="range" id="strength" min="0" max="1" step="0.05" value="1"></div>
+      <h3>Light</h3>
+      <div class="slider">Exposure (stops) <b></b><input type="range" id="exposure" min="-2" max="2" step="0.05" value="0"></div>
+      <div class="slider">Contrast <b></b><input type="range" id="contrast" min="-0.6" max="0.6" step="0.02" value="0"></div>
+      <div class="slider">Highlights <b></b><input type="range" id="highlights" min="-1" max="1" step="0.05" value="0"></div>
+      <div class="slider">Shadows <b></b><input type="range" id="shadows" min="-1" max="1" step="0.05" value="0"></div>
+      <h3>Color</h3>
+      <div class="slider">Temperature <b></b><input type="range" id="temperature" min="-1" max="1" step="0.05" value="0"></div>
+      <div class="slider">Tint <b></b><input type="range" id="tint" min="-1" max="1" step="0.05" value="0"></div>
+      <div class="slider">Saturation <b></b><input type="range" id="saturation" min="-1" max="1" step="0.05" value="0"></div>
+      <h3>Detail and effects</h3>
+      <div class="slider">Sharpen <b></b><input type="range" id="sharpen" min="0" max="2" step="0.05" value="0"></div>
+      <div class="slider">Vignette <b></b><input type="range" id="vignette" min="-1" max="1" step="0.05" value="0"></div>
+    </div>
+  </div>
+
+  <div class="tiles">
+    <div class="tile card hero"><div class="k">GPU denoise</div><div class="v" id="tDen">–</div><div class="s" id="tDenSub">–</div></div>
+    <div class="tile card"><div class="k">GPU develop (per slider move)</div><div class="v" id="tDev">–</div><div class="s" id="tDevSub">exposure … vignette</div></div>
+    <div class="tile card"><div class="k">CPU, same Kotlin (Wasm, 1 thread)</div><div class="v" id="tCpu">–</div><div class="s" id="tCpuSub">optional</div></div>
+    <div class="tile card"><div class="k">GPU speedup</div><div class="v" id="tSpeed">–</div><div class="s" id="tSpeedSub">denoise + develop</div></div>
+    <div class="tile card"><div class="k">Image quality (PSNR)</div><div class="v" id="tPsnr">–</div><div class="s" id="tPsnrSub">vs noise-free chart</div></div>
+  </div>
+
+  <h2>Why this matters</h2>
+  <div class="why">
+    <div class="card"><h3>Good denoise is expensive</h3><p>Edge-preserving filters look at every neighbour of every pixel: 169 × 3.8 million = 650 million weighted samples per frame. On a CPU that's seconds per slider move; on the GPU it's interactive.</p></div>
+    <div class="card"><h3>Measured, not eyeballed</h3><p>The test chart (ColorChecker patches, Siemens star, zone plate, gray wedge) is drawn and noised on the GPU, so PSNR against the clean original says exactly how much the denoise recovers.</p></div>
+    <div class="card"><h3>One codebase</h3><p>The same Kotlin functions run in the browser on the GPU, in a JVM batch tool for servers, and in unit tests. No GLSL, no WGSL, no CUDA to keep in sync.</p></div>
+  </div>
+
+  <h2>The code</h2>
+  <div class="card">
+    <div class="tabs">
+      <button class="on" data-tab="kotlin">Kotlin (what you write)</button>
+      <button data-tab="denoise">WGSL: denoise</button>
+      <button data-tab="develop">WGSL: develop</button>
+    </div>
+    <pre><code id="code">loading…</code></pre>
+  </div>
+
+  <footer>
+    Built with <a href="https://github.com/rajumark/kernelin">Kernelin</a> 0.1.0 from Maven Central ·
+    <a href="https://github.com/rajumark/kernelin-projects/tree/main/photo-studio">Source</a> ·
+    Your photos never leave your device: everything runs locally in the browser.
+  </footer>
+</div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const SLIDERS = ["radius", "colorSigma", "strength", "exposure", "contrast", "highlights", "shadows", "temperature", "tint", "saturation", "sharpen", "vignette"];
+const DENOISE = new Set(["radius", "colorSigma", "strength"]);
+const DEFAULTS = Object.fromEntries(SLIDERS.map((s) => [s, $(s).value]));
+const LOOK = { exposure: 0.25, contrast: 0.15, shadows: 0.35, highlights: -0.3, saturation: 0.15, sharpen: 0.6, vignette: -0.35, temperature: 0.1 };
+const fmtMs = (ms) => ms >= 1000 ? (ms / 1000).toFixed(2) + " s" : ms.toFixed(ms < 10 ? 1 : 0) + " ms";
+let K = null, gpuOk = false, W = 0, H = 0, noisyPsnr = -1;
+let busy = false, pending = false, needDenoise = true, lastGpu = null;
+
+const val = (id) => parseFloat($(id).value);
+function showValues() { SLIDERS.forEach((s) => { $(s).parentElement.querySelector("b").textContent = $(s).value; }); }
+
+function sizeCanvases(w, h) {
+  W = w; H = h;
+  for (const c of [$("after"), $("before")]) { c.width = w; c.height = h; }
+}
+function paint(canvas, int32) {
+  canvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(int32.buffer, int32.byteOffset, int32.length * 4), W, H), 0, 0);
+}
+
+async function loadChart(iso) {
+  const w = 2400, h = 1600;
+  sizeCanvases(w, h);
+  const r = gpuOk ? await K.photoLoadChart(w, h, iso, 1) : K.photoLoadChartCpu(w, h, iso, 1);
+  paint($("before"), r.noisy);
+  noisyPsnr = r.psnr;
+  needDenoise = true;
+  $("tCpu").textContent = "–"; $("tSpeed").textContent = "–";
+  await process();
+}
+
+async function loadPhoto(file) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 4096 / Math.max(bmp.width, bmp.height));
+  const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+  sizeCanvases(w, h);
+  const g = $("before").getContext("2d");
+  g.drawImage(bmp, 0, 0, w, h);
+  const data = g.getImageData(0, 0, w, h);
+  K.photoLoadImage(new Int32Array(data.data.buffer), w, h);
+  noisyPsnr = -1;
+  needDenoise = true;
+  $("tCpu").textContent = "–"; $("tSpeed").textContent = "–";
+  await process();
+}
+
+function args() { return SLIDERS.map(val).map((v, i) => i === 0 ? Math.round(v) : v); }
+
+async function process() {
+  if (!gpuOk) return;
+  if (busy) { pending = true; return; }
+  busy = true;
+  try {
+    const den = needDenoise; needDenoise = false;
+    const r = await K.photoProcess(den, ...args());
+    paint($("after"), r.data);
+    if (r.denoiseMs >= 0) {
+      lastGpu = { denoise: r.denoiseMs };
+      const taps = Math.pow(2 * Math.round(val("radius")) + 1, 2);
+      $("tDen").textContent = fmtMs(r.denoiseMs);
+      $("tDenSub").textContent = `${(W * H / 1e6).toFixed(1)} MP × ${taps} taps`;
+      if (r.psnr > 0) {
+        $("tPsnr").textContent = `+${(r.psnr - noisyPsnr).toFixed(1)} dB`;
+        $("tPsnrSub").textContent = `${noisyPsnr.toFixed(1)} → ${r.psnr.toFixed(1)} dB vs clean chart`;
+      } else { $("tPsnr").textContent = "–"; $("tPsnrSub").textContent = "photos have no clean reference"; }
+    }
+    lastGpu.develop = r.developMs;
+    $("tDev").textContent = fmtMs(r.developMs);
+  } catch (e) { $("hint").textContent = "GPU error: " + e; }
+  busy = false;
+  if (pending) { pending = false; process(); }
+}
+
+async function runCpu() {
+  $("runCpu").disabled = true;
+  $("progress").style.display = "block";
+  const timer = setInterval(() => { $("progress").firstElementChild.style.width = (K.photoCpuProgress() * 100) + "%"; }, 100);
+  try {
+    const a = args();
+    const r = await K.photoProcessCpu(...a);
+    if (!gpuOk) paint($("after"), r.data);
+    const total = r.denoiseMs + r.developMs;
+    $("tCpu").textContent = fmtMs(total);
+    $("tCpuSub").textContent = `denoise ${fmtMs(r.denoiseMs)} + develop ${fmtMs(r.developMs)}`;
+    if (lastGpu) {
+      $("tSpeed").textContent = Math.round(total / (lastGpu.denoise + lastGpu.develop)) + "×";
+      $("tSpeedSub").textContent = r.psnr > 0 ? `CPU PSNR ${r.psnr.toFixed(2)} dB: same result` : "same kernels, same result";
+    }
+  } finally {
+    clearInterval(timer);
+    $("progress").style.display = "none";
+    $("runCpu").disabled = false;
+  }
+}
+
+// before/after divider
+function setSplit(fraction) {
+  fraction = Math.max(0, Math.min(1, fraction));
+  $("before").style.clipPath = `inset(0 ${100 - fraction * 100}% 0 0)`;
+  $("divider").style.left = `calc(${fraction * 100}% - 1px)`;
+}
+let dragging = false;
+$("viewer").addEventListener("pointerdown", (e) => { if (!$("viewer").classList.contains("zoom")) { dragging = true; move(e); } });
+window.addEventListener("pointerup", () => dragging = false);
+window.addEventListener("pointermove", (e) => { if (dragging) move(e); });
+function move(e) { const r = $("viewer").getBoundingClientRect(); setSplit((e.clientX - r.left) / r.width); }
+setSplit(0.5);
+
+$("zoom").addEventListener("click", () => {
+  const v = $("viewer"); const z = v.classList.toggle("zoom");
+  $("zoom").textContent = z ? "Fit" : "100% crop";
+  $("divider").style.display = z ? "none" : "";
+  if (z) { v.scrollLeft = W * 0.3; v.scrollTop = H * 0.06; zoomSplit(); } else setSplit(0.5);
+});
+// At 100%, split the visible part of the image down the middle: noisy on the left, processed on the right.
+function zoomSplit() {
+  const v = $("viewer");
+  if (v.classList.contains("zoom")) $("before").style.clipPath = `inset(0 ${W - v.scrollLeft - v.clientWidth / 2}px 0 0)`;
+}
+$("viewer").addEventListener("scroll", zoomSplit);
+
+SLIDERS.forEach((s) => $(s).addEventListener("input", () => { if (DENOISE.has(s)) needDenoise = true; showValues(); process(); }));
+$("reset").addEventListener("click", () => { SLIDERS.forEach((s) => $(s).value = DEFAULTS[s]); needDenoise = true; showValues(); process(); });
+$("auto").addEventListener("click", () => { Object.entries(LOOK).forEach(([k, v]) => $(k).value = v); showValues(); process(); });
+$("source").addEventListener("change", () => loadChart(parseFloat($("source").value.split("-")[1])));
+$("file").addEventListener("change", () => { const f = $("file").files[0]; if (f) loadPhoto(f); });
+$("runCpu").addEventListener("click", runCpu);
+$("download").addEventListener("click", () => $("after").toBlob((b) => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = "photo-studio.png"; a.click(); }));
+document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", async () => {
+  document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
+  $("code").textContent = b.dataset.tab === "kotlin" ? await fetch("Kernels.kt").then((r) => r.text()) : K.photoWgsl(b.dataset.tab);
+}));
+showValues();
+
+(async () => {
+  K = await import("./wasm/photo-studio.mjs");
+  $("code").textContent = await fetch("Kernels.kt").then((r) => r.text());
+  try {
+    $("badge").textContent = "GPU · " + await K.photoInit();
+    gpuOk = true;
+  } catch (e) {
+    $("badge").textContent = "WebGPU not available: CPU only (press Run on CPU)";
+    $("badge").classList.add("off");
+  }
+  await loadChart(6400);
+})();
+</script>
+</body>
+</html>

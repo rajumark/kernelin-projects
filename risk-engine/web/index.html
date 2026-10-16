@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Risk Engine</title>
+<meta name="description" content="Monte Carlo options pricing and greeks on your GPU, written in plain Kotlin and compiled to WebGPU by Kernelin.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f6f2; --card: #ffffff; --ink: #1d1b16; --ink-2: #5d5a52; --ink-3: #8f8b81;
+    --line: #e6e3db; --accent: #7f52ff; --accent-2: #e8e0ff; --good: #0f7b5f; --good-bg: #ddf3ea;
+    --warn: #a35a00; --warn-bg: #fdf0dc; --bad: #c4322b; --chart-1: #7f52ff; --chart-2: #e2711d; --chart-3: #1d8f6f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15140f; --card: #1e1d18; --ink: #f1efe8; --ink-2: #b8b4aa; --ink-3: #858176; --line: #2f2d27;
+      --accent: #a585ff; --accent-2: #2c2440; --good: #4cc79f; --good-bg: #173229; --warn: #f0a84b; --warn-bg: #352812;
+      --chart-1: #a585ff; --chart-2: #f0954b; --chart-3: #4cc79f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 Inter, system-ui, sans-serif; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 28px 0 8px; }
+  .crumb { font-size: 13px; color: var(--ink-3); }
+  .crumb a { color: var(--ink-2); }
+  h1 { font-size: clamp(28px, 4.4vw, 42px); line-height: 1.12; margin: 8px 0 10px; letter-spacing: -0.02em; }
+  h1 em { font-style: normal; color: var(--accent); }
+  .lead { color: var(--ink-2); max-width: 760px; margin: 0; font-size: 16.5px; }
+  h2 { font-size: 20px; margin: 36px 0 12px; letter-spacing: -0.01em; }
+  .badge { display: inline-flex; gap: 6px; align-items: center; font: 12.5px/1 "JetBrains Mono", monospace; padding: 6px 10px;
+    border-radius: 999px; background: var(--accent-2); color: var(--accent); margin-top: 14px; }
+  .badge.off { background: var(--warn-bg); color: var(--warn); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  .grid { display: grid; gap: 14px; }
+  .controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px 14px; }
+  label { display: block; font-size: 12.5px; color: var(--ink-2); font-weight: 500; }
+  input, select { width: 100%; margin-top: 4px; font: 14px "JetBrains Mono", monospace; padding: 7px 9px; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; align-items: center; }
+  button { font: 600 14px Inter, sans-serif; border-radius: 9px; padding: 10px 16px; cursor: pointer; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .hint { font-size: 13px; color: var(--ink-3); }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .tile .k { font-size: 12.5px; color: var(--ink-2); }
+  .tile .v { font: 600 26px/1.2 "JetBrains Mono", monospace; margin-top: 4px; letter-spacing: -0.02em; }
+  .tile .s { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; }
+  .tile.hero .v { color: var(--accent); }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  th { font-size: 12px; color: var(--ink-2); font-weight: 600; }
+  th:first-child, td:first-child { text-align: left; }
+  td.num { font-family: "JetBrains Mono", monospace; font-size: 13px; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 12px; font-family: Inter, sans-serif; }
+  .tag.good { background: var(--good-bg); color: var(--good); }
+  .tag.warn { background: var(--warn-bg); color: var(--warn); }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  canvas { width: 100%; height: 300px; display: block; }
+  .chart-title { font-weight: 600; font-size: 14px; }
+  .chart-sub { font-size: 12.5px; color: var(--ink-3); margin-bottom: 8px; }
+  .why { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .why h3 { margin: 0 0 6px; font-size: 15px; }
+  .why p { margin: 0; color: var(--ink-2); font-size: 14px; }
+  pre { margin: 0; overflow: auto; max-height: 420px; font: 12.5px/1.5 "JetBrains Mono", monospace; background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tabs button { padding: 6px 12px; font-size: 13px; }
+  .tabs button.on { background: var(--accent-2); color: var(--accent); border-color: transparent; }
+  .progress { height: 4px; background: var(--line); border-radius: 4px; overflow: hidden; width: 180px; display: none; }
+  .progress i { display: block; height: 100%; width: 0; background: var(--chart-2); }
+  footer { margin: 48px 0 32px; font-size: 13px; color: var(--ink-3); }
+  footer a { color: var(--ink-2); }
+  @media (max-width: 820px) { .tiles { grid-template-columns: 1fr 1fr; } .charts, .why { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="crumb"><a href="../">Kernelin projects</a> / Risk Engine</div>
+    <h1>Price an options book with greeks <em>in milliseconds</em>, on the GPU in your browser.</h1>
+    <p class="lead">Monte Carlo simulation of six products, including path-dependent Asian, barrier and lookback options, over 252 trading days, with Delta, Gamma and Vega. The whole engine is ~150 lines of plain Kotlin. Kernelin compiles it to a WebGPU shader; the same code is unit-tested on the JVM.</p>
+    <div class="badge" id="badge">starting…</div>
+  </header>
+
+  <h2>Market and contract</h2>
+  <div class="card">
+    <div class="controls">
+      <label>Spot price<input id="spot" type="number" value="100" step="1"></label>
+      <label>Strike<input id="strike" type="number" value="100" step="1"></label>
+      <label>Volatility<input id="vol" type="number" value="0.25" step="0.01"></label>
+      <label>Interest rate<input id="rate" type="number" value="0.03" step="0.005"></label>
+      <label>Maturity (years)<input id="maturity" type="number" value="1" step="0.25"></label>
+      <label>Barrier (knock-out)<input id="barrier" type="number" value="140" step="5"></label>
+      <label>Days monitored<input id="steps" type="number" value="252" step="1"></label>
+      <label>Paths
+        <select id="paths">
+          <option value="65536">65,536</option>
+          <option value="262144">262,144</option>
+          <option value="1048576" selected>1,048,576</option>
+          <option value="4194304">4,194,304</option>
+        </select>
+      </label>
+    </div>
+    <div class="actions">
+      <button class="primary" id="runGpu" disabled>Run risk report on GPU</button>
+      <button id="runCpu" disabled>Run the same Kotlin on CPU</button>
+      <div class="progress" id="progress"><i></i></div>
+      <span class="hint" id="hint">Each report runs 4 scenarios (base, spot ±1%, vol +1 pt) on the same random numbers.</span>
+    </div>
+  </div>
+
+  <h2>Result</h2>
+  <div class="tiles">
+    <div class="tile card hero"><div class="k">GPU, full risk report</div><div class="v" id="tGpu">–</div><div class="s" id="tGpuSub">press "Run"</div></div>
+    <div class="tile card"><div class="k">CPU, same Kotlin (Wasm, 1 thread)</div><div class="v" id="tCpu">–</div><div class="s" id="tCpuSub">optional</div></div>
+    <div class="tile card"><div class="k">GPU speedup</div><div class="v" id="tSpeed">–</div><div class="s" id="tSpeedSub">same paths, same numbers</div></div>
+    <div class="tile card"><div class="k">Simulated price steps / second</div><div class="v" id="tRate">–</div><div class="s" id="tRateSub">paths × days × scenarios</div></div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="scroll">
+      <table id="table">
+        <thead><tr><th>Product</th><th>Price</th><th>± 95%</th><th>Exact formula</th><th>Check</th><th>Delta</th><th>Gamma</th><th>Vega (1 pt)</th></tr></thead>
+        <tbody><tr><td colspan="8" class="hint">Run a report to fill this table.</td></tr></tbody>
+      </table>
+    </div>
+    <p class="hint" id="extra" style="margin:12px 0 0"></p>
+  </div>
+
+  <div class="charts" style="margin-top:14px">
+    <div class="card">
+      <div class="chart-title">200 simulated price paths</div>
+      <div class="chart-sub">Drawn from the GPU, with the strike and the knock-out barrier.</div>
+      <canvas id="fan"></canvas>
+    </div>
+    <div class="card">
+      <div class="chart-title">Convergence to the exact Black–Scholes price</div>
+      <div class="chart-sub">European call, 95% interval narrows as 1/√paths. Each point is one GPU run.</div>
+      <canvas id="conv"></canvas>
+    </div>
+  </div>
+
+  <h2>Why a trading desk cares</h2>
+  <div class="why">
+    <div class="card"><h3>Exotics have no formula</h3><p>Barrier, Asian and lookback payoffs depend on the whole price path. Monte Carlo is the industry method, and it needs millions of paths for a stable price and stable greeks.</p></div>
+    <div class="card"><h3>Risk is many reprices</h3><p>Every greek is another full simulation. A book of hundreds of trades, repriced on every market move, is exactly the workload banks buy GPU farms for.</p></div>
+    <div class="card"><h3>Without a second language</h3><p>Usually this means CUDA or C++ kernels next to the Kotlin service. Here the pricer is one Kotlin function: tested on the JVM, run on any GPU through WebGPU.</p></div>
+  </div>
+
+  <h2>The code</h2>
+  <div class="card">
+    <div class="tabs"><button class="on" data-tab="kotlin">Kotlin (what you write)</button><button data-tab="wgsl">WGSL (what Kernelin generates)</button></div>
+    <pre><code id="code">loading…</code></pre>
+  </div>
+
+  <footer>
+    Built with <a href="https://github.com/rajumark/kernelin">Kernelin</a> 0.1.0 from Maven Central ·
+    <a href="https://github.com/rajumark/kernelin-projects/tree/main/risk-engine">Source</a> ·
+    Prices are checked against closed-form Black–Scholes and geometric-Asian formulas on every run.
+  </footer>
+</div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+let K = null;
+let gpuReport = null, cpuReport = null;
+const fmtMs = (ms) => ms >= 1000 ? (ms / 1000).toFixed(2) + " s" : ms.toFixed(ms < 10 ? 1 : 0) + " ms";
+const fmtBig = (x) => x >= 1e9 ? (x / 1e9).toFixed(2) + " B" : x >= 1e6 ? (x / 1e6).toFixed(1) + " M" : Math.round(x).toLocaleString();
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function params() {
+  const n = (id) => parseFloat($(id).value);
+  return [n("spot"), n("strike"), n("rate"), n("vol"), n("maturity"), n("barrier"), parseInt($("steps").value), parseInt($("paths").value), 2026];
+}
+
+function renderTable(r) {
+  const rows = r.products.map((p) => {
+    let check = '<span class="hint">no formula</span>';
+    if (p.analytic !== null) {
+      const z = Math.abs(p.price - p.analytic) / p.se;
+      check = z < 4 ? `<span class="tag good">✓ ${z.toFixed(1)} σ</span>` : `<span class="tag warn">${z.toFixed(1)} σ</span>`;
+    }
+    return `<tr><td>${p.name}</td><td class="num"><b>${p.price.toFixed(4)}</b></td><td class="num">${(1.96 * p.se).toFixed(4)}</td>` +
+      `<td class="num">${p.analytic === null ? "–" : p.analytic.toFixed(4)}</td><td>${check}</td>` +
+      `<td class="num">${p.delta.toFixed(4)}</td><td class="num">${p.gamma.toFixed(4)}</td><td class="num">${p.vega.toFixed(4)}</td></tr>`;
+  });
+  $("table").querySelector("tbody").innerHTML = rows.join("");
+  const a = r.products[3];
+  const gain = Math.pow(a.se / r.arithmeticCv.se, 2);
+  $("extra").innerHTML = `Arithmetic Asian with control variate: <b>${r.arithmeticCv.price.toFixed(4)} ± ${(1.96 * r.arithmeticCv.se).toFixed(4)}</b> ` +
+    `(${Math.round(gain)}× less variance). Exact European call greeks: delta ${r.callGreeks.delta.toFixed(4)}, gamma ${r.callGreeks.gamma.toFixed(4)}, vega ${r.callGreeks.vega.toFixed(4)}.`;
+}
+
+function renderTiles() {
+  if (gpuReport) {
+    const steps = gpuReport.paths * gpuReport.steps * 4;
+    $("tGpu").textContent = fmtMs(gpuReport.millis);
+    $("tGpuSub").textContent = `${gpuReport.paths.toLocaleString()} paths × 4 scenarios`;
+    $("tRate").textContent = fmtBig(steps / (gpuReport.millis / 1000));
+    $("tRateSub").textContent = `${fmtBig(steps)} steps in ${fmtMs(gpuReport.millis)}`;
+  }
+  if (cpuReport) {
+    $("tCpu").textContent = fmtMs(cpuReport.millis);
+    $("tCpuSub").textContent = `${cpuReport.paths.toLocaleString()} paths × 4 scenarios`;
+  }
+  if (gpuReport && cpuReport && gpuReport.paths === cpuReport.paths) {
+    $("tSpeed").textContent = Math.round(cpuReport.millis / gpuReport.millis) + "×";
+    // Same counter-based random numbers on both sides: prices agree to float rounding, far inside the error bars.
+    const worst = Math.max(...gpuReport.products.map((p, i) => Math.abs(p.price - cpuReport.products[i].price) / p.se));
+    $("tSpeedSub").textContent = `GPU and CPU agree within ${worst.toFixed(3)} σ`;
+  }
+}
+
+function setupCanvas(c) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  c.width = w * dpr; c.height = h * dpr;
+  const g = c.getContext("2d");
+  g.scale(dpr, dpr);
+  g.clearRect(0, 0, w, h);
+  g.font = "11px JetBrains Mono, monospace";
+  return { g, w, h };
+}
+
+async function drawFan() {
+  const [spot, strike, rate, vol, maturity, barrier, steps] = params();
+  const count = 200;
+  const data = await K.samplePathsGpu(spot, rate, vol, maturity, steps, count, 2026);
+  const { g, w, h } = setupCanvas($("fan"));
+  const L = 44, R = 10, T = 10, B = 22;
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < data.length; i++) { lo = Math.min(lo, data[i]); hi = Math.max(hi, data[i]); }
+  hi = Math.max(hi, barrier * 1.02); lo = Math.min(lo, strike * 0.9);
+  const x = (k) => L + (k / steps) * (w - L - R);
+  const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (h - T - B);
+  g.fillStyle = css("--ink-3");
+  for (let i = 0; i <= 4; i++) { const v = lo + (hi - lo) * i / 4; g.fillText(v.toFixed(0), 4, y(v) + 4); }
+  g.fillText("day 0", L, h - 6); g.fillText("day " + steps, w - R - 52, h - 6);
+  g.globalAlpha = 0.22; g.lineWidth = 1; g.strokeStyle = css("--chart-1");
+  for (let p = 0; p < count; p++) {
+    g.beginPath();
+    for (let k = 0; k <= steps; k++) { const v = data[p * (steps + 1) + k]; k ? g.lineTo(x(k), y(v)) : g.moveTo(x(k), y(v)); }
+    g.stroke();
+  }
+  g.globalAlpha = 1;
+  const hline = (v, color, label) => { g.strokeStyle = color; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(L, y(v)); g.lineTo(w - R, y(v)); g.stroke(); g.setLineDash([]); g.fillStyle = color; g.fillText(label, L + 6, y(v) - 5); };
+  hline(barrier, css("--bad"), "barrier " + barrier);
+  hline(strike, css("--chart-2"), "strike " + strike);
+}
+
+async function drawConvergence() {
+  const p = params();
+  const counts = [4096, 16384, 65536, 262144, 1048576, 4194304];
+  const pts = [];
+  for (const n of counts) pts.push({ n, ...JSON.parse(await K.priceGpu(p[0], p[1], p[2], p[3], p[4], p[5], p[6], n, 99)) });
+  const { g, w, h } = setupCanvas($("conv"));
+  const L = 52, R = 12, T = 12, B = 24;
+  const exact = pts[0].exact;
+  const span = Math.max(...pts.map((q) => Math.abs(q.price - exact) + 1.96 * q.se)) * 1.15;
+  const x = (i) => L + (i / (counts.length - 1)) * (w - L - R);
+  const y = (v) => T + (1 - (v - (exact - span)) / (2 * span)) * (h - T - B);
+  g.fillStyle = css("--ink-3");
+  [exact - span, exact, exact + span].forEach((v) => g.fillText(v.toFixed(3), 4, y(v) + 4));
+  counts.forEach((n, i) => g.fillText(n >= 1048576 ? (n / 1048576) + "M" : (n / 1024) + "k", x(i) - 10, h - 6));
+  g.strokeStyle = css("--chart-3"); g.setLineDash([5, 4]); g.beginPath(); g.moveTo(L, y(exact)); g.lineTo(w - R, y(exact)); g.stroke(); g.setLineDash([]);
+  g.fillStyle = css("--chart-3"); g.fillText("exact " + exact.toFixed(4), w - R - 110, y(exact) - 6);
+  pts.forEach((q, i) => {
+    g.strokeStyle = css("--chart-1"); g.lineWidth = 2;
+    g.beginPath(); g.moveTo(x(i), y(q.price - 1.96 * q.se)); g.lineTo(x(i), y(q.price + 1.96 * q.se)); g.stroke();
+    g.fillStyle = css("--chart-1"); g.beginPath(); g.arc(x(i), y(q.price), 4, 0, 7); g.fill();
+  });
+  g.fillStyle = css("--ink-3"); g.fillText(`${counts.length} GPU runs, last one ${fmtMs(pts[pts.length - 1].millis)}`, L + 4, T + 10);
+}
+
+async function runGpu() {
+  $("runGpu").disabled = true;
+  try {
+    const p = params();
+    await K.riskGpu(...p.slice(0, 7), 65536, 1); // warm-up: pipeline + buffers
+    gpuReport = JSON.parse(await K.riskGpu(...p));
+    renderTable(gpuReport);
+    renderTiles();
+    await drawFan();
+    await drawConvergence();
+  } catch (e) { $("hint").textContent = "GPU run failed: " + e; }
+  $("runGpu").disabled = false;
+}
+
+async function runCpu() {
+  $("runCpu").disabled = true; $("runGpu").disabled = true;
+  $("progress").style.display = "block";
+  const timer = setInterval(() => { $("progress").firstElementChild.style.width = (K.riskCpuProgress() * 100) + "%"; }, 100);
+  try {
+    cpuReport = JSON.parse(await K.riskCpu(...params()));
+    if (!gpuReport) renderTable(cpuReport);
+    renderTiles();
+  } finally {
+    clearInterval(timer);
+    $("progress").style.display = "none";
+    $("runCpu").disabled = false; $("runGpu").disabled = !gpuOk;
+  }
+}
+
+let gpuOk = false;
+document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", async () => {
+  document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
+  $("code").textContent = b.dataset.tab === "wgsl" ? K.riskWgsl() : await fetch("Kernels.kt").then((r) => r.text());
+}));
+$("runGpu").addEventListener("click", runGpu);
+$("runCpu").addEventListener("click", runCpu);
+
+(async () => {
+  K = await import("./wasm/risk-engine.mjs");
+  $("code").textContent = await fetch("Kernels.kt").then((r) => r.text());
+  $("runCpu").disabled = false;
+  try {
+    const desc = await K.riskInit();
+    gpuOk = true;
+    $("badge").textContent = "GPU · " + desc;
+    $("runGpu").disabled = false;
+    runGpu();
+  } catch (e) {
+    $("badge").textContent = "WebGPU not available: CPU only";
+    $("badge").classList.add("off");
+    $("hint").textContent = "Try a recent Chrome, Edge or Safari (desktop or Android) for the GPU.";
+  }
+})();
+</script>
+</body>
+</html>

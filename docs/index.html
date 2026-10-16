@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kernelin Projects</title>
+<meta name="description" content="Real-world GPU applications in plain Kotlin, built with Kernelin from Maven Central: options risk, photo editing, video analytics.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --bg: #f7f6f2; --card: #fff; --ink: #1d1b16; --ink-2: #5d5a52; --ink-3: #8f8b81; --line: #e6e3db; --accent: #7f52ff; --accent-2: #e8e0ff; --warn: #a35a00; --warn-bg: #fdf0dc; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #15140f; --card: #1e1d18; --ink: #f1efe8; --ink-2: #b8b4aa; --ink-3: #858176; --line: #2f2d27; --accent: #a585ff; --accent-2: #2c2440; --warn: #f0a84b; --warn-bg: #352812; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 Inter, system-ui, sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 48px 0 16px; }
+  .kicker { font: 600 12.5px "JetBrains Mono", monospace; color: var(--accent); letter-spacing: .04em; }
+  h1 { font-size: clamp(30px, 5vw, 48px); line-height: 1.1; margin: 10px 0 14px; letter-spacing: -0.025em; }
+  .lead { color: var(--ink-2); font-size: 17px; max-width: 760px; margin: 0; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 32px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; }
+  .card .type { font: 600 12px "JetBrains Mono", monospace; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
+  .card h2 { font-size: 21px; margin: 6px 0 8px; }
+  .card p { color: var(--ink-2); margin: 0 0 14px; font-size: 14.5px; }
+  .stat { font: 600 30px/1.1 "JetBrains Mono", monospace; color: var(--accent); letter-spacing: -0.02em; }
+  .stat-sub { font-size: 13px; color: var(--ink-3); margin: 4px 0 14px; }
+  .check { font-size: 13.5px; color: var(--ink-2); border-top: 1px solid var(--line); padding-top: 12px; margin-top: auto; }
+  .links { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .links a { font: 600 13.5px Inter, sans-serif; text-decoration: none; padding: 8px 14px; border-radius: 9px; border: 1px solid var(--line); color: var(--ink); }
+  .links a.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .soon { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 6px; background: var(--warn-bg); color: var(--warn); }
+  h3 { font-size: 19px; margin: 44px 0 10px; }
+  ul { color: var(--ink-2); padding-left: 20px; }
+  code { font: 13px "JetBrains Mono", monospace; background: var(--accent-2); padding: 1px 5px; border-radius: 4px; }
+  footer { margin: 48px 0 32px; font-size: 13px; color: var(--ink-3); }
+  footer a { color: var(--ink-2); }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">KERNELIN PROJECTS</div>
+    <h1>Real GPU workloads, written in plain Kotlin.</h1>
+    <p class="lead">Three applications built with <a href="https://github.com/rajumark/kernelin">Kernelin</a> 0.1.0 from Maven Central. Each runs the same Kotlin functions on your GPU (WebGPU) and on the CPU, checks its own answers against exact formulas or ground truth, and shows measured speed. Open one in Chrome, Edge or Safari, on desktop or Android.</p>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <div class="type">Simulation · finance</div>
+      <h2>Risk Engine</h2>
+      <p>Monte Carlo pricing and greeks of an options book: European, Asian, barrier and lookback, over 252 trading days.</p>
+      <div class="stat">46 ms</div>
+      <div class="stat-sub">1M paths × 4 scenarios on an Apple M5 GPU · 53× faster than 10 JVM cores</div>
+      <div class="check">Checked on every run against Black–Scholes and the geometric-Asian closed form.</div>
+      <div class="links"><a class="primary" href="risk-engine/">Open app</a><a href="https://github.com/rajumark/kernelin-projects/tree/main/risk-engine">Code</a></div>
+    </div>
+    <div class="card">
+      <div class="type">Image · photo editing</div>
+      <h2>Photo Studio</h2>
+      <p>Live photo editing: edge-preserving denoise, exposure, white balance, tone, color, sharpening, vignette.</p>
+      <div class="stat">+11.3 dB</div>
+      <div class="stat-sub">denoise of 3.8 MP in 48 ms on the GPU · 119× faster than in-browser CPU</div>
+      <div class="check">Measured as PSNR against a noise-free test chart with real sensor noise.</div>
+      <div class="links"><a class="primary" href="photo-studio/">Open app</a><a href="https://github.com/rajumark/kernelin-projects/tree/main/photo-studio">Code</a></div>
+    </div>
+    <div class="card">
+      <div class="type">Video · camera analytics</div>
+      <h2>Motion Guard</h2>
+      <p>Traffic and security camera analytics: motion vectors for every block, vehicle speed per lane, zones and events.</p>
+      <div class="stat">0.995 / 0.972</div>
+      <div class="stat-sub">precision / recall vs ground truth · 576 M comparisons per 720p frame</div>
+      <div class="check">Lane speeds within 6% of the truth; swaying trees and noise never alarm.</div>
+      <div class="links"><span class="soon">GPU web app in progress</span><a href="https://github.com/rajumark/kernelin-projects/tree/main/motion-guard">Code</a></div>
+    </div>
+  </div>
+
+  <h3>How to read these numbers</h3>
+  <ul>
+    <li>GPU times include copying data to the GPU and back. CPU times are the same Kotlin functions on the JVM (all cores) or compiled to Wasm (one browser thread).</li>
+    <li>Every project has unit tests that run the kernels as normal Kotlin, so the logic is tested before it ever reaches a GPU.</li>
+    <li>Building them found a real bug in Kernelin (helpers named like WGSL built-ins, such as <code>uniform</code>); it is fixed for the next release.</li>
+  </ul>
+
+  <footer>
+    <a href="https://github.com/rajumark/kernelin-projects">Source on GitHub</a> · <a href="https://github.com/rajumark/kernelin">Kernelin</a> · Apache 2.0
+  </footer>
+</div>
+</body>
+</html>
