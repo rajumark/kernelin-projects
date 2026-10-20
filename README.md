@@ -1,3 +1,7 @@
+<p align="center">
+  <a href="https://github.com/rajumark/kernelin"><img src="docs/assets/banner.png" alt="Kernelin: the same Kotlin code runs way faster on the GPU than on the CPU, up to 118 times faster" width="100%"></a>
+</p>
+
 # Kernelin projects
 
 Real-world GPU applications written in **plain Kotlin** with [Kernelin](https://github.com/rajumark/kernelin), the
